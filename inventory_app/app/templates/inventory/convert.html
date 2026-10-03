@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, qty_input %}
+{% block title %}プリント変換 | 在庫管理{% endblock %}
+{% block content %}
+<h1 class="page-title">プリント変換</h1>
+<p class="text-muted">無地在庫を使って、プリント済み製品を作ります。ミスプリントで数が減った場合は、使用数と完成数を別々に入力します。</p>
+<form method="post" class="panel d-grid gap-3" style="max-width:560px">
+  {{ csrf() }}
+  <div><label class="form-label" for="variant_id">使う無地在庫</label>
+    <select class="form-select" id="variant_id" name="variant_id" required>
+      <option value="">選んでください</option>
+      {% for v in variants %}
+      <option value="{{ v.id }}" {{ 'selected' if form.get('variant_id') == v.id|string }}>
+        [{{ v.item.category.name }}] {{ v.label }} (在庫 {{ v.quantity }})</option>
+      {% endfor %}
+    </select></div>
+  <div><label class="form-label" for="design">デザイン</label>
+    <select class="form-select" id="design" name="design">
+      <option value="">新しいデザインを入力 ↓</option>
+      {% for d in designs %}<option value="{{ d.name }}" {{ 'selected' if form.get('design') == d.name }}>{{ d.name }}</option>{% endfor %}
+    </select>
+    <input class="form-control mt-2" name="design_new" placeholder="新しいデザイン名" value="{{ form.get('design_new','') }}"></div>
+  <div>{{ qty_input("used", form.get("used",""), label="使用数(無地から減る数)") }}</div>
+  <div>{{ qty_input("output", form.get("output",""), label="完成数(プリント済みに増える数)") }}</div>
+  <div><label class="form-label">メモ</label><input class="form-control" name="note" value="{{ form.get('note','') }}"></div>
+  <button class="btn btn-primary btn-lg">変換する</button>
+</form>
+{% endblock %}

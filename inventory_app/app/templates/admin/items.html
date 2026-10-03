@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block content %}
+<h1 class="page-title">品番管理</h1>
+<ul class="nav nav-pills mb-3 flex-nowrap overflow-auto">
+  <li class="nav-item"><a class="nav-link {{ 'active' if not cat_id }} text-nowrap" href="{{ url_for('admin.items') }}">すべて</a></li>
+  {% for c in cats %}<li class="nav-item"><a class="nav-link {{ 'active' if c.id == cat_id }} text-nowrap" href="{{ url_for('admin.items', category=c.id) }}">{{ c.name }}</a></li>{% endfor %}
+</ul>
+<div class="panel p-0 table-responsive mb-4">
+  <table class="table mb-0 align-middle">
+    <thead><tr><th>カテゴリー</th><th>ブランド</th><th>品番</th><th>商品名</th><th></th></tr></thead>
+    <tbody>
+    {% for i in items %}
+      <tr class="{{ 'text-muted' if not i.is_active }}"><td>{{ i.category.name }}</td><td>{{ i.brand }}</td><td>{{ i.item_no }}</td>
+        <td>{{ i.name }}{% if not i.is_active %} (停止中){% endif %}</td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.item_edit', iid=i.id) }}">編集</a></td></tr>
+    {% else %}<tr><td colspan="5" class="text-muted">まだ品番がありません。下のフォームから追加してください。</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<h2 class="h6 fw-bold">品番を追加</h2>
+<form method="post" class="panel d-grid gap-3" style="max-width:560px">
+  {{ csrf() }}
+  <select class="form-select" name="category_id" required>
+    <option value="">カテゴリーを選ぶ</option>
+    {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if c.id == cat_id }}>{{ c.name }}</option>{% endfor %}
+  </select>
+  <input class="form-control" name="brand" placeholder="ブランド(例: Printstar)">
+  <input class="form-control" name="item_no" placeholder="品番(例: 085-CVT)">
+  <input class="form-control" name="name" placeholder="商品名(例: ヘビーウェイトTシャツ)">
+  <input class="form-control" name="note" placeholder="メモ">
+  <button class="btn btn-primary">追加</button>
+</form>
+{% endblock %}

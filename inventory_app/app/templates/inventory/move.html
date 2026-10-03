@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, qty_input %}
+{% block title %}出荷・調整 | 在庫管理{% endblock %}
+{% block content %}
+<h1 class="page-title">出荷・棚卸し調整</h1>
+<form method="post" class="panel d-grid gap-3" style="max-width:560px">
+  {{ csrf() }}
+  <div><label class="form-label">操作</label>
+    <select class="form-select" name="kind" required>
+      <option value="ship" {{ 'selected' if form.get('kind') != 'adjust' }}>出荷(数量ぶん減らす)</option>
+      <option value="adjust" {{ 'selected' if form.get('kind') == 'adjust' }}>棚卸し調整(＋で増やす / −で減らす・理由必須)</option>
+    </select></div>
+  <div><label class="form-label">対象の在庫</label>
+    <select class="form-select" name="target" required>
+      <option value="">選んでください</option>
+      <optgroup label="プリント済み">
+        {% for p in products %}<option value="p:{{ p.id }}" {{ 'selected' if form.get('target') == 'p:%d'|format(p.id) }}>{{ p.label }} (在庫 {{ p.quantity }})</option>{% endfor %}
+      </optgroup>
+      <optgroup label="無地">
+        {% for v in variants %}<option value="v:{{ v.id }}" {{ 'selected' if form.get('target') == 'v:%d'|format(v.id) }}>[{{ v.item.category.name }}] {{ v.label }} (在庫 {{ v.quantity }})</option>{% endfor %}
+      </optgroup>
+    </select></div>
+  <div>{{ qty_input("qty", form.get("qty",""), negative=True, label="数量(調整のときは ± 可)") }}</div>
+  <div><label class="form-label">メモ・理由</label><input class="form-control" name="note" value="{{ form.get('note','') }}"></div>
+  <button class="btn btn-primary btn-lg">登録</button>
+</form>
+{% endblock %}

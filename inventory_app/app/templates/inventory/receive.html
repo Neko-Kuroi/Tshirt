@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, qty_input %}
+{% block title %}入荷 | 在庫管理{% endblock %}
+{% block content %}
+<h1 class="page-title">入荷登録</h1>
+<form method="post" class="panel d-grid gap-3" style="max-width:560px">
+  {{ csrf() }}
+  <div>
+    <label class="form-label" for="item_id">品番</label>
+    <select class="form-select" id="item_id" name="item_id" required>
+      <option value="">選んでください</option>
+      {% for it in items %}
+      <option value="{{ it.id }}" {{ 'selected' if it.id == selected }}
+        data-uses-color="{{ 1 if it.category.uses_color else 0 }}"
+        data-uses-size="{{ 1 if it.category.uses_size else 0 }}"
+        data-uses-variant-name="{{ 1 if it.category.uses_variant_name else 0 }}">
+        [{{ it.category.name }}] {{ it.label }}</option>
+      {% endfor %}
+    </select>
+    {% if not items %}<div class="form-text">品番が未登録です。管理者が「品番」から登録してください。</div>{% endif %}
+  </div>
+  <div id="f_variant_name"><label class="form-label">種類名(デザイン名など)</label>
+    <input class="form-control" name="variant_name" value="{{ form.get('variant_name','') }}"></div>
+  <div id="f_color"><label class="form-label">色</label>
+    <input class="form-control" name="color" list="colors" value="{{ form.get('color','') }}">
+    <datalist id="colors">{% for c in colors %}<option value="{{ c }}">{% endfor %}</datalist></div>
+  <div id="f_size"><label class="form-label">サイズ</label>
+    <input class="form-control" name="size" list="sizes" value="{{ form.get('size','') }}">
+    <datalist id="sizes">{% for s in ['S','M','L','XL','XXL','3XL','FREE'] %}<option value="{{ s }}">{% endfor %}</datalist></div>
+  <div>{{ qty_input("qty", form.get("qty","")) }}</div>
+  <div><label class="form-label">メモ(納品書番号など)</label>
+    <input class="form-control" name="note" value="{{ form.get('note','') }}"></div>
+  <button class="btn btn-primary btn-lg">入荷を登録</button>
+</form>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">{{ code }}</h1>
+<p>{{ message }}</p>
+<a class="btn btn-primary" href="{{ url_for('inventory.dashboard') }}">ダッシュボードへ</a>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}無地在庫 | 在庫管理{% endblock %}
+{% block content %}
+<h1 class="page-title">無地在庫</h1>
+{% if not cats %}
+  <div class="panel">カテゴリーがありません。</div>
+{% else %}
+<ul class="nav nav-pills mb-3 flex-nowrap overflow-auto">
+  {% for c in cats %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if cat and c.id == cat.id }} text-nowrap"
+      href="{{ url_for('inventory.blank_list', category=c.id) }}">{{ c.name }}</a></li>
+  {% endfor %}
+</ul>
+<form class="mb-3 d-flex gap-2" method="get">
+  <input type="hidden" name="category" value="{{ cat.id }}">
+  <input class="form-control" name="q" value="{{ q }}" placeholder="ブランド・品番・商品名で検索" type="search">
+  <button class="btn btn-primary">検索</button>
+</form>
+
+{% for m in items %}
+<div class="panel mb-3">
+  <div class="d-flex justify-content-between align-items-baseline flex-wrap">
+    <h2 class="h6 fw-bold mb-2">{{ m.item.label }}</h2>
+    <span class="text-muted small">合計 <span class="num">{{ m.total }}</span></span>
+  </div>
+  {% if m.rows %}
+  <div class="table-responsive">
+    <table class="table table-sm matrix mb-0">
+      <thead><tr>
+        <th>{{ '色 / 種類' if cat.uses_size else ('種類名' if cat.uses_variant_name else '色') }}</th>
+        {% for s in m.sizes %}<th>{{ s or '数量' }}</th>{% endfor %}
+        {% if cat.uses_size %}<th>計</th>{% endif %}
+      </tr></thead>
+      <tbody>
+      {% for r in m.rows %}
+        <tr><td>{{ r.label }}</td>
+          {% for s in m.sizes %}
+            {% set v = r.cells.get(s) %}
+            <td class="num {{ 'zero' if (not v or v.quantity == 0) else ('low' if v.quantity <= 3) }}">{{ v.quantity if v else '–' }}</td>
+          {% endfor %}
+          {% if cat.uses_size %}<td class="num fw-bold">{{ r.total }}</td>{% endif %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="text-muted small">在庫登録がありません。</div>
+  {% endif %}
+  <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('inventory.receive', item_id=m.item.id) }}">この品番を入荷</a></div>
+</div>
+{% else %}
+<div class="panel text-muted">該当する品番がありません。管理者は「品番」から登録できます。</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

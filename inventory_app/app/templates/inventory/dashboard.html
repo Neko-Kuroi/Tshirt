@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delta %}
+{% block content %}
+<h1 class="page-title">ダッシュボード</h1>
+{% if not cats %}
+  <div class="panel">カテゴリーがまだありません。<code>flask --app run seed</code> で初期カテゴリーを登録するか、管理画面から追加してください。</div>
+{% else %}
+<div class="row g-3">
+  {% for c in cats %}
+  <div class="col-6 col-md-4 col-lg-3">
+    <a class="panel d-block text-decoration-none h-100" href="{{ url_for('inventory.blank_list', category=c.id) }}">
+      <div class="fw-bold">{{ c.name }}</div>
+      <div class="text-muted small">無地</div><div class="fs-3 num text-start">{{ blank.get(c.id, 0) }}</div>
+      {% if c.is_printable %}
+      <div class="text-muted small">プリント済み</div><div class="fs-5 num text-start">{{ printed.get(c.id, 0) }}</div>
+      {% endif %}
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2 class="page-title mt-4">直近の操作</h2>
+<div class="panel p-0 table-responsive">
+  <table class="table mb-0 align-middle">
+    <tbody>
+    {% for m in recent %}
+      <tr><td class="text-nowrap">{{ m.created_at|jst }}</td><td>{{ m.kind_label }}</td>
+          <td>{{ m.target_label }}</td><td class="text-end">{{ delta(m.delta) }}</td><td>{{ m.user.username }}</td></tr>
+    {% else %}
+      <tr><td class="text-muted">まだ操作がありません。「入荷」から登録してください。</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

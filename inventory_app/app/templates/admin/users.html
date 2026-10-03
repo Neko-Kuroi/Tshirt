@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block content %}
+<h1 class="page-title">ユーザー管理</h1>
+<div class="panel p-0 table-responsive mb-4">
+  <table class="table mb-0 align-middle">
+    <thead><tr><th>ユーザー名</th><th>権限</th><th>状態</th><th>操作</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr><td>{{ u.username }}</td><td>{{ '管理者' if u.is_admin else 'スタッフ' }}</td><td>{{ '有効' if u.is_active_flag else '無効' }}</td>
+        <td class="d-flex gap-2 flex-wrap">
+          <form method="post" action="{{ url_for('admin.user_toggle', uid=u.id) }}">{{ csrf() }}
+            <button class="btn btn-sm btn-outline-secondary">{{ '無効にする' if u.is_active_flag else '有効にする' }}</button></form>
+          <form method="post" action="{{ url_for('admin.user_password', uid=u.id) }}" class="d-flex gap-1">{{ csrf() }}
+            <input class="form-control form-control-sm" style="min-height:36px;width:9rem" name="password" type="password" placeholder="新パスワード" autocomplete="new-password">
+            <button class="btn btn-sm btn-outline-primary">再設定</button></form>
+        </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<h2 class="h6 fw-bold">ユーザーを追加</h2>
+<form method="post" class="panel d-grid gap-3" style="max-width:560px">
+  {{ csrf() }}
+  <input class="form-control" name="username" placeholder="ユーザー名" autocomplete="off" required>
+  <input class="form-control" name="password" type="password" placeholder="パスワード(8文字以上)" autocomplete="new-password" required>
+  <select class="form-select" name="role"><option value="staff">スタッフ</option><option value="admin">管理者</option></select>
+  <button class="btn btn-primary">追加</button>
+</form>
+{% endblock %}

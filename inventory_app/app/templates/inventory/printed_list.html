@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}プリント済み | 在庫管理{% endblock %}
+{% block content %}
+<h1 class="page-title">プリント済み在庫</h1>
+<form class="mb-3 d-flex gap-2" method="get">
+  <input class="form-control" name="q" value="{{ q }}" placeholder="デザイン・品番・色で検索" type="search">
+  <button class="btn btn-primary">検索</button>
+</form>
+{% for design, rows in groups.items() %}
+<div class="panel mb-3">
+  <div class="d-flex justify-content-between"><h2 class="h6 fw-bold">{{ design.name }}</h2>
+    <span class="num text-muted">{{ rows|sum(attribute='quantity') }}</span></div>
+  <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+    <tbody>
+    {% for p in rows %}
+      <tr><td>{{ p.variant.item.category.name }}</td><td>{{ p.variant.item.label }}</td>
+          <td>{{ p.variant.spec }}</td><td class="num fw-bold">{{ p.quantity }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+{% else %}
+<div class="panel text-muted">プリント済み在庫がありません。「プリント変換」で作成できます。</div>
+{% endfor %}
+{% endblock %}
