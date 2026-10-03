@@ -1,0 +1,424 @@
+diff --git a/inventory_app/app/admin/routes.py b/inventory_app/app/admin/routes.py
+index 2626906..8157556 100644
+--- a/inventory_app/app/admin/routes.py
++++ b/inventory_app/app/admin/routes.py
+@@ -1,9 +1,11 @@
+ from flask import flash, redirect, render_template, request, url_for
+ from flask_login import current_user
+ from sqlalchemy.exc import IntegrityError
++from sqlalchemy.orm import contains_eager
+ 
+ from .. import db
+ from ..models import Category, Item, User
++from ..utils import to_int
+ from . import admin_required, bp
+ 
+ 
+@@ -41,20 +43,25 @@ def categories():
+ def category_edit(cid):
+     cat = db.get_or_404(Category, cid)
+     if request.method == "POST":
+-        cat.name = request.form.get("name", "").strip() or cat.name
+-        cat.sort_order = int(request.form.get("sort_order") or 0)
+-        # 在庫が既にあるカテゴリーでも、入力欄の出し分け設定は変更できる(既存データは消えない)
+-        cat.uses_color = _flag("uses_color")
+-        cat.uses_size = _flag("uses_size")
+-        cat.uses_variant_name = _flag("uses_variant_name")
+-        cat.is_printable = _flag("is_printable")
+-        try:
+-            db.session.commit()
+-            flash("カテゴリーを更新しました。", "success")
+-            return redirect(url_for("admin.categories"))
+-        except IntegrityError:
+-            db.session.rollback()
+-            flash("同名のカテゴリーが既にあります。", "danger")
++        raw_order = request.form.get("sort_order", "").strip()
++        sort_order = to_int(raw_order) if raw_order else 0  # 空欄は従来どおり0
++        if sort_order is None:
++            flash("表示順は整数で入力してください。", "danger")
++        else:
++            cat.name = request.form.get("name", "").strip() or cat.name
++            cat.sort_order = sort_order
++            # 在庫が既にあるカテゴリーでも、入力欄の出し分け設定は変更できる(既存データは消えない)
++            cat.uses_color = _flag("uses_color")
++            cat.uses_size = _flag("uses_size")
++            cat.uses_variant_name = _flag("uses_variant_name")
++            cat.is_printable = _flag("is_printable")
++            try:
++                db.session.commit()
++                flash("カテゴリーを更新しました。", "success")
++                return redirect(url_for("admin.categories"))
++            except IntegrityError:
++                db.session.rollback()
++                flash("同名のカテゴリーが既にあります。", "danger")
+     return render_template("admin/category_edit.html", cat=cat)
+ 
+ 
+@@ -64,7 +71,7 @@ def category_edit(cid):
+ @admin_required
+ def items():
+     if request.method == "POST":
+-        cat = db.session.get(Category, int(request.form.get("category_id") or 0))
++        cat = db.session.get(Category, to_int(request.form.get("category_id"), 0))
+         brand = request.form.get("brand", "").strip()
+         item_no = request.form.get("item_no", "").strip()
+         name = request.form.get("name", "").strip()
+@@ -84,7 +91,7 @@ def items():
+                 flash("同じカテゴリーに同じブランド・品番が既にあります。", "danger")
+     cats = Category.query.order_by(Category.sort_order, Category.id).all()
+     cat_id = request.args.get("category", type=int)
+-    query = Item.query.join(Category)
++    query = Item.query.join(Item.category).options(contains_eager(Item.category))
+     if cat_id:
+         query = query.filter(Item.category_id == cat_id)
+     all_items = query.order_by(Category.sort_order, Item.brand, Item.item_no).all()
+diff --git a/inventory_app/app/inventory/routes.py b/inventory_app/app/inventory/routes.py
+index fd557da..64911b9 100644
+--- a/inventory_app/app/inventory/routes.py
++++ b/inventory_app/app/inventory/routes.py
+@@ -3,12 +3,14 @@ from collections import OrderedDict
+ from flask import current_app, flash, redirect, render_template, request, url_for
+ from flask_login import current_user, login_required
+ from sqlalchemy import func
++from sqlalchemy.orm import contains_eager, joinedload, selectinload
+ 
+ from .. import db
+ from ..models import (KINDS, Category, Design, Item, PrintedProduct, StockMovement,
+                       Variant)
+ from ..services import stock
+ from ..services.stock import StockError
++from ..utils import to_int
+ from . import bp
+ 
+ SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "XXL", "3XL", "XXXL", "4XL", "5XL",
+@@ -24,11 +26,15 @@ def size_key(s):
+     return (2, 0, s)
+ 
+ 
+-def to_int(raw, default=None):
+-    try:
+-        return int((raw or "").strip())
+-    except ValueError:
+-        return default
++def _movement_loads():
++    """履歴の表示(target_label / user)に使う関連をまとめて読み、行ごとの追加クエリを防ぐ。"""
++    return (
++        joinedload(StockMovement.user),
++        joinedload(StockMovement.variant).joinedload(Variant.item),
++        joinedload(StockMovement.printed_product).options(
++            joinedload(PrintedProduct.design),
++            joinedload(PrintedProduct.variant).joinedload(Variant.item)),
++    )
+ 
+ 
+ @bp.before_request
+@@ -48,7 +54,8 @@ def dashboard():
+                    .join(Variant, Variant.item_id == Item.id)
+                    .join(PrintedProduct, PrintedProduct.variant_id == Variant.id)
+                    .group_by(Item.category_id).all())
+-    recent = (StockMovement.query.order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
++    recent = (StockMovement.query.options(*_movement_loads())
++              .order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
+               .limit(8).all())
+     return render_template("inventory/dashboard.html", cats=cats, blank=blank,
+                            printed=printed, recent=recent)
+@@ -64,7 +71,8 @@ def blank_list():
+     q = request.args.get("q", "").strip()
+     items = []
+     if cat:
+-        query = Item.query.filter_by(category_id=cat.id, is_active=True)
++        query = (Item.query.filter_by(category_id=cat.id, is_active=True)
++                 .options(selectinload(Item.variants)))
+         if q:
+             like = f"%{q}%"
+             query = query.filter(db.or_(Item.brand.like(like), Item.item_no.like(like),
+@@ -93,7 +101,12 @@ def build_matrix(item, cat):
+ @bp.route("/printed")
+ def printed_list():
+     q = request.args.get("q", "").strip()
+-    query = (PrintedProduct.query.join(Design).join(Variant).join(Item))
++    query = (PrintedProduct.query
++             .join(PrintedProduct.design).join(PrintedProduct.variant)
++             .join(Variant.item).join(Item.category)
++             .options(contains_eager(PrintedProduct.design),
++                      contains_eager(PrintedProduct.variant)
++                      .contains_eager(Variant.item).contains_eager(Item.category)))
+     if q:
+         like = f"%{q}%"
+         query = query.filter(db.or_(Design.name.like(like), Item.brand.like(like),
+@@ -109,7 +122,8 @@ def printed_list():
+ # ---- 入荷 ------------------------------------------------------------
+ 
+ def _items_for_select():
+-    return (Item.query.join(Category).filter(Item.is_active.is_(True))
++    return (Item.query.join(Item.category).options(contains_eager(Item.category))
++            .filter(Item.is_active.is_(True))
+             .order_by(Category.sort_order, Item.brand, Item.item_no).all())
+ 
+ 
+@@ -160,7 +174,8 @@ def convert():
+         except StockError as e:
+             db.session.rollback()
+             flash(str(e), "danger")
+-    variants = (Variant.query.join(Item).join(Category)
++    variants = (Variant.query.join(Variant.item).join(Item.category)
++                .options(contains_eager(Variant.item).contains_eager(Item.category))
+                 .filter(Category.is_printable.is_(True), Variant.quantity > 0, Item.is_active.is_(True))
+                 .order_by(Category.sort_order, Item.brand, Item.item_no, Variant.color, Variant.size)
+                 .all())
+@@ -204,10 +219,14 @@ def move():
+         except StockError as e:
+             db.session.rollback()
+             flash(str(e), "danger")
+-    variants = (Variant.query.join(Item).join(Category)
++    variants = (Variant.query.join(Variant.item).join(Item.category)
++                .options(contains_eager(Variant.item).contains_eager(Item.category))
+                 .order_by(Category.sort_order, Item.brand, Item.item_no, Variant.color, Variant.size)
+                 .all())
+-    products = (PrintedProduct.query.join(Design).join(Variant).join(Item)
++    products = (PrintedProduct.query
++                .join(PrintedProduct.design).join(PrintedProduct.variant).join(Variant.item)
++                .options(contains_eager(PrintedProduct.design),
++                         contains_eager(PrintedProduct.variant).contains_eager(Variant.item))
+                 .order_by(Design.name, Item.brand, Item.item_no).all())
+     return render_template("inventory/move.html", variants=variants, products=products,
+                            form=request.form)
+@@ -219,7 +238,7 @@ def move():
+ def history():
+     page = max(to_int(request.args.get("page"), 1), 1)
+     kind = request.args.get("kind", "")
+-    query = StockMovement.query
++    query = StockMovement.query.options(*_movement_loads())
+     if kind in KINDS:
+         query = query.filter_by(kind=kind)
+     pagination = query.order_by(StockMovement.created_at.desc(), StockMovement.id.desc()).paginate(
+diff --git a/inventory_app/app/services/stock.py b/inventory_app/app/services/stock.py
+index 4696d40..deac1dc 100644
+--- a/inventory_app/app/services/stock.py
++++ b/inventory_app/app/services/stock.py
+@@ -6,6 +6,7 @@
+ import uuid
+ 
+ from sqlalchemy import update
++from sqlalchemy.dialects import postgresql, sqlite
+ 
+ from .. import db
+ from ..models import Design, Item, PrintedProduct, StockMovement, Variant
+@@ -44,6 +45,22 @@ def _positive(n, label="数量") -> int:
+     return n
+ 
+ 
++def _insert_ignore(model, **values):
++    """同じ行を同時に作ろうとしても失敗しないINSERT(UNIQUE衝突なら何もしない)。
++
++    衝突の判定をDB側で原子的に行うので、SAVEPOINTも例外処理も要らない。
++    呼び出し側は、実行後に必ずSELECTし直して行を取得すること。
++    """
++    dialect = db.session.get_bind().dialect.name
++    if dialect == "sqlite":
++        stmt = sqlite.insert(model).values(**values).on_conflict_do_nothing()
++    elif dialect == "postgresql":
++        stmt = postgresql.insert(model).values(**values).on_conflict_do_nothing()
++    else:
++        raise NotImplementedError(f"未対応のDBです: {dialect}")
++    db.session.execute(stmt)
++
++
+ def get_or_create_variant(item: Item, color="", size="", variant_name="") -> Variant:
+     """カテゴリーの設定に合わない列は空文字に落として登録する。"""
+     cat = item.category
+@@ -56,12 +73,11 @@ def get_or_create_variant(item: Item, color="", size="", variant_name="") -> Var
+         raise StockError("サイズを入力してください。")
+     if cat.uses_variant_name and not variant_name:
+         raise StockError("種類名を入力してください。")
+-    v = Variant.query.filter_by(
+-        item_id=item.id, color=color, size=size, variant_name=variant_name).first()
++    key = dict(item_id=item.id, color=color, size=size, variant_name=variant_name)
++    v = Variant.query.filter_by(**key).first()
+     if not v:
+-        v = Variant(item_id=item.id, color=color, size=size, variant_name=variant_name, quantity=0)
+-        db.session.add(v)
+-        db.session.flush()
++        _insert_ignore(Variant, **key, quantity=0)
++        v = Variant.query.filter_by(**key).one()
+     return v
+ 
+ 
+@@ -71,18 +87,17 @@ def get_or_create_design(name: str) -> Design:
+         raise StockError("デザイン名を入力してください。")
+     d = Design.query.filter_by(name=name).first()
+     if not d:
+-        d = Design(name=name)
+-        db.session.add(d)
+-        db.session.flush()
++        _insert_ignore(Design, name=name)
++        d = Design.query.filter_by(name=name).one()
+     return d
+ 
+ 
+ def get_or_create_product(design: Design, variant: Variant) -> PrintedProduct:
+-    p = PrintedProduct.query.filter_by(design_id=design.id, variant_id=variant.id).first()
++    key = dict(design_id=design.id, variant_id=variant.id)
++    p = PrintedProduct.query.filter_by(**key).first()
+     if not p:
+-        p = PrintedProduct(design_id=design.id, variant_id=variant.id, quantity=0)
+-        db.session.add(p)
+-        db.session.flush()
++        _insert_ignore(PrintedProduct, **key, quantity=0)
++        p = PrintedProduct.query.filter_by(**key).one()
+     return p
+ 
+ 
+diff --git a/inventory_app/app/utils.py b/inventory_app/app/utils.py
+new file mode 100644
+index 0000000..6c02096
+--- /dev/null
++++ b/inventory_app/app/utils.py
+@@ -0,0 +1,6 @@
++def to_int(raw, default=None):
++    """フォーム/クエリの文字列を整数にする。変換できなければ default を返す(例外は出さない)。"""
++    try:
++        return int((raw or "").strip())
++    except ValueError:
++        return default
+diff --git a/inventory_app/tests/test_stock.py b/inventory_app/tests/test_stock.py
+index 62efdc6..a23e5dc 100644
+--- a/inventory_app/tests/test_stock.py
++++ b/inventory_app/tests/test_stock.py
+@@ -1,7 +1,7 @@
+ import pytest
+ 
+ from app import db
+-from app.models import Item, PrintedProduct, StockMovement, User, Variant
++from app.models import Design, Item, PrintedProduct, StockMovement, User, Variant
+ from app.services import stock
+ from app.services.stock import StockError
+ 
+@@ -119,3 +119,43 @@ def test_ship_printed_product(app):
+     stock.ship(u, p, 4)
+     db.session.commit()
+     assert PrintedProduct.query.one().quantity == 6
++
++
++# ---- 同時リクエストで同じ行を作ろうとした場合(UNIQUE衝突しても落ちない) ----------
++
++@pytest.fixture
++def lose_the_race(monkeypatch):
++    """INSERTの直前に「別リクエストが先に同じ行を作った」状況を再現する。"""
++    real = stock._insert_ignore
++
++    def racing(model, **values):
++        real(model, **values)  # 他リクエストが先に作成
++        real(model, **values)  # 自分のINSERTは衝突するが、何も起きず例外にならない
++    monkeypatch.setattr(stock, "_insert_ignore", racing)
++
++
++def test_get_or_create_variant_survives_race(app, lose_the_race):
++    v = stock.get_or_create_variant(_tee(), "黒", "M")
++    db.session.commit()
++    assert Variant.query.count() == 1
++    assert v.quantity == 0 and v.updated_at is not None
++
++
++def test_get_or_create_design_survives_race(app, lose_the_race):
++    d = stock.get_or_create_design(" ロゴA ")
++    db.session.commit()
++    assert Design.query.count() == 1 and d.name == "ロゴA"
++
++
++def test_get_or_create_product_survives_race(app, monkeypatch):
++    v = stock.get_or_create_variant(_tee(), "黒", "M")
++    d = stock.get_or_create_design("ロゴA")
++    real = stock._insert_ignore
++
++    def racing(model, **values):
++        real(model, **values)
++        real(model, **values)
++    monkeypatch.setattr(stock, "_insert_ignore", racing)
++    p = stock.get_or_create_product(d, v)
++    db.session.commit()
++    assert PrintedProduct.query.count() == 1 and p.quantity == 0
+diff --git a/inventory_app/tests/test_web.py b/inventory_app/tests/test_web.py
+index 02b1459..93b7582 100644
+--- a/inventory_app/tests/test_web.py
++++ b/inventory_app/tests/test_web.py
+@@ -1,5 +1,10 @@
++import pytest
++from flask import g
++from sqlalchemy import event
++
+ from app import db
+-from app.models import Item, StockMovement, User, Variant
++from app.models import Category, Item, StockMovement, User, Variant
++from app.services import stock
+ 
+ 
+ def test_login_required(client):
+@@ -71,3 +76,67 @@ def test_receive_rejects_garbage_qty(client, login, app):
+         assert "1以上の整数" in r.get_data(as_text=True), bad
+     with app.app_context():
+         assert StockMovement.query.count() == 0
++
++
++# ---- 管理画面: 数値でない入力で500にならない ----------------------------------
++
++def test_admin_invalid_numbers_do_not_crash(client, login):
++    login("admin")
++    r = client.post("/admin/categories/1", data={"name": "Tシャツ", "sort_order": "abc"})
++    assert r.status_code == 200 and "整数" in r.get_data(as_text=True)
++    r = client.post("/admin/items", data={"category_id": "abc", "brand": "X"})
++    assert r.status_code == 200 and "カテゴリーを選んでください" in r.get_data(as_text=True)
++
++
++def test_admin_invalid_sort_order_changes_nothing_and_blank_means_zero(client, login):
++    login("admin")
++    before = db.session.get(Category, 1)
++    name = before.name
++    client.post("/admin/categories/1", data={"name": "改名", "sort_order": "abc"})
++    db.session.remove()
++    assert db.session.get(Category, 1).name == name  # 不正入力では何も保存されない
++    r = client.post("/admin/categories/1", data={"name": name, "sort_order": ""})
++    assert r.status_code == 302
++    db.session.remove()
++    assert db.session.get(Category, 1).sort_order == 0
++
++
++# ---- N+1の防止: 表示行が増えてもSQL発行数が増えない -----------------------------
++
++def _seed_printed(n, start):
++    tee = Category.query.filter_by(name="Tシャツ").one()
++    admin = User.query.filter_by(username="admin").one()
++    for i in range(start, start + n):
++        item = Item(category_id=tee.id, brand=f"Brand{i}", item_no=f"No{i}", name="T")
++        db.session.add(item)
++        db.session.flush()
++        v = stock.get_or_create_variant(item, "黒", "M")
++        stock.receive(admin, v, 10)
++        stock.convert_to_printed(admin, v, f"Design{i}", 5, 5)
++    db.session.commit()
++
++
++def _count_queries(client, path):
++    db.session.remove()  # identity mapを空にして、遅延ロードを正しく数える
++    # テストはapp contextを共有するので、Flask-Loginがgに保持した旧セッションのユーザーを捨てる
++    g.pop("_login_user", None)
++    n = []
++
++    def cap(*args):
++        n.append(1)
++    event.listen(db.engine, "before_cursor_execute", cap)
++    try:
++        assert client.get(path).status_code == 200
++    finally:
++        event.remove(db.engine, "before_cursor_execute", cap)
++    return len(n)
++
++
++@pytest.mark.parametrize("path", ["/", "/blank?category=1", "/printed", "/convert", "/move", "/history"])
++def test_query_count_does_not_grow_with_rows(client, login, path):
++    login("admin")
++    _seed_printed(3, 0)
++    small = _count_queries(client, path)
++    _seed_printed(12, 3)
++    large = _count_queries(client, path)
++    assert large == small, f"{path}: {small} -> {large}"
