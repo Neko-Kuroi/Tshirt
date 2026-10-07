@@ -20,13 +20,28 @@
 </div>
 {% endif %}
 
+<h2 class="page-title mt-4">未対応の備考
+  {% if note_count %}<span class="badge text-bg-warning">{{ note_count }}</span>{% endif %}</h2>
+<div class="panel">
+  {% for n in notes %}
+  <div class="mb-2">
+    <span class="fw-bold">{{ n.item_label }}</span>
+    <span class="badge text-bg-warning">{{ n.target or '品番全体' }}</span>
+    <div class="note-body note-clamp">{{ n.body }}</div>
+  </div>
+  {% else %}
+  <span class="text-muted">未対応の備考はありません。</span>
+  {% endfor %}
+  <a href="{{ url_for('inventory.notes') }}">備考の一覧{% if note_count > notes|length %}(残り {{ note_count - notes|length }} 件){% endif %}</a>
+</div>
+
 <h2 class="page-title mt-4">直近の操作</h2>
 <div class="panel p-0 table-responsive">
   <table class="table mb-0 align-middle">
     <tbody>
     {% for m in recent %}
       <tr><td class="text-nowrap">{{ m.created_at|jst }}</td><td>{{ m.kind_label }}</td>
-          <td>{{ m.target_label }}</td><td class="text-end">{{ delta(m.delta) }}</td><td>{{ m.user.username }}</td></tr>
+          <td>{{ m.target_label }}</td><td class="text-end">{{ delta(m.delta) }}</td><td>{{ m.username }}</td></tr>
     {% else %}
       <tr><td class="text-muted">まだ操作がありません。「入荷」から登録してください。</td></tr>
     {% endfor %}

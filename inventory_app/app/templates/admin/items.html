@@ -11,7 +11,7 @@
     <thead><tr><th>カテゴリー</th><th>ブランド</th><th>品番</th><th>商品名</th><th></th></tr></thead>
     <tbody>
     {% for i in items %}
-      <tr class="{{ 'text-muted' if not i.is_active }}"><td>{{ i.category.name }}</td><td>{{ i.brand }}</td><td>{{ i.item_no }}</td>
+      <tr class="{{ 'text-muted' if not i.is_active }}"><td>{{ i.category_name }}</td><td>{{ i.brand }}</td><td>{{ i.item_no }}</td>
         <td>{{ i.name }}{% if not i.is_active %} (停止中){% endif %}</td>
         <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.item_edit', iid=i.id) }}">編集</a></td></tr>
     {% else %}<tr><td colspan="5" class="text-muted">まだ品番がありません。下のフォームから追加してください。</td></tr>
@@ -28,8 +28,9 @@
   </select>
   <input class="form-control" name="brand" placeholder="ブランド(例: Printstar)">
   <input class="form-control" name="item_no" placeholder="品番(例: 085-CVT)">
-  <input class="form-control" name="name" placeholder="商品名(例: ヘビーウェイトTシャツ)">
-  <input class="form-control" name="note" placeholder="メモ">
+  <div class="form-text mt-0">ブランドか品番のどちらかは必須です。</div>
+  <input class="form-control" name="name" placeholder="商品名(任意。例: ヘビーウェイトTシャツ)">
+  <div class="form-text mt-0">仕入れ先の変更や「入荷は最後」などのメモは、登録後に無地在庫の画面から「備考」として残せます。</div>
   <button class="btn btn-primary">追加</button>
 </form>
 {% endblock %}

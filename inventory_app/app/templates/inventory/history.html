@@ -16,7 +16,7 @@
     {% for m in pagination.items %}
       <tr><td class="text-nowrap">{{ m.created_at|jst }}</td><td class="text-nowrap">{{ m.kind_label }}</td>
           <td>{{ m.target_label }}</td><td class="text-end">{{ delta(m.delta) }}</td>
-          <td class="text-nowrap">{{ m.user.username }}</td><td>{{ m.note }}</td></tr>
+          <td class="text-nowrap">{{ m.username }}</td><td>{{ m.note }}</td></tr>
     {% else %}
       <tr><td colspan="6" class="text-muted">履歴がありません。</td></tr>
     {% endfor %}

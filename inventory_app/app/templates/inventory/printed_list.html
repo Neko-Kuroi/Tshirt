@@ -6,15 +6,15 @@
   <input class="form-control" name="q" value="{{ q }}" placeholder="デザイン・品番・色で検索" type="search">
   <button class="btn btn-primary">検索</button>
 </form>
-{% for design, rows in groups.items() %}
+{% for design_name, rows in groups.items() %}
 <div class="panel mb-3">
-  <div class="d-flex justify-content-between"><h2 class="h6 fw-bold">{{ design.name }}</h2>
+  <div class="d-flex justify-content-between"><h2 class="h6 fw-bold">{{ design_name }}</h2>
     <span class="num text-muted">{{ rows|sum(attribute='quantity') }}</span></div>
   <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
     <tbody>
     {% for p in rows %}
-      <tr><td>{{ p.variant.item.category.name }}</td><td>{{ p.variant.item.label }}</td>
-          <td>{{ p.variant.spec }}</td><td class="num fw-bold">{{ p.quantity }}</td></tr>
+      <tr><td>{{ p.category_name }}</td><td>{{ p.item_label }}</td>
+          <td>{{ p.spec }}</td><td class="num fw-bold">{{ p.quantity }}</td></tr>
     {% endfor %}
     </tbody></table></div>
 </div>

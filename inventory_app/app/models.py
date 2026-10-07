@@ -1,10 +1,13 @@
+import hmac
 from datetime import datetime, timezone
 
+from flask import current_app
 from flask_login import UserMixin
 from sqlalchemy import CheckConstraint, UniqueConstraint
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db, login_manager
+from .utils import to_int
 
 
 def utcnow():
@@ -34,10 +37,25 @@ class User(UserMixin, db.Model):
     def is_admin(self):
         return self.role == "admin"
 
+    def session_token(self) -> str:
+        """パスワードを変えると変わる値(ハッシュそのものは Cookie に出さず、HMAC にする)。"""
+        key = current_app.config["SECRET_KEY"]
+        key = key.encode() if isinstance(key, str) else key
+        return hmac.new(key, self.password_hash.encode(), "sha256").hexdigest()[:20]
+
+    def get_id(self):  # Flask-Login がセッション/remember Cookie に保存する値
+        return f"{self.id}:{self.session_token()}"
+
 
 @login_manager.user_loader
-def load_user(user_id):
-    return db.session.get(User, int(user_id))
+def load_session_user(session_id):
+    """'ユーザーID:トークン' が一致しなければ(パスワード変更後など)None。"""
+    uid, _, token = (session_id or "").partition(":")
+    uid = to_int(uid)  # 範囲外・数字以外は None(改ざんされたCookieでも落ちない)
+    user = db.session.get(User, uid) if uid is not None else None
+    if user and hmac.compare_digest(token, user.session_token()):
+        return user
+    return None
 
 
 class Category(db.Model):
@@ -54,7 +72,7 @@ class Category(db.Model):
 
 
 class Item(db.Model):
-    """ブランド・品番単位のマスタ。"""
+    """ブランド・品番単位のマスタ。(画面側は、sqlite3 版の『行』と同じ名前の属性で読む)"""
     __tablename__ = "item"
     __table_args__ = (UniqueConstraint("category_id", "brand", "item_no"),)
     id = db.Column(db.Integer, primary_key=True)
@@ -62,6 +80,7 @@ class Item(db.Model):
     brand = db.Column(db.String(64), nullable=False, default="")
     item_no = db.Column(db.String(64), nullable=False, default="")
     name = db.Column(db.String(128), nullable=False, default="")
+    # 旧『メモ』欄。画面では使わない(備考 = item_note に引き継ぎ済み)。列は互換のため残す
     note = db.Column(db.Text, nullable=False, default="")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
@@ -69,9 +88,26 @@ class Item(db.Model):
     variants = db.relationship("Variant", back_populates="item")
 
     @property
+    def item_name(self):
+        return self.name
+
+    @property
     def label(self):
         head = " ".join(p for p in (self.brand, self.item_no) if p)
         return f"{head} {self.name}".strip() or f"Item#{self.id}"
+
+    @property
+    def item_label(self):
+        return self.label
+
+    @property
+    def category_name(self):
+        return self.category.name
+
+    uses_color = property(lambda self: self.category.uses_color)
+    uses_size = property(lambda self: self.category.uses_size)
+    uses_variant_name = property(lambda self: self.category.uses_variant_name)
+    is_printable = property(lambda self: self.category.is_printable)
 
 
 class Variant(db.Model):
@@ -97,8 +133,16 @@ class Variant(db.Model):
         return " / ".join(p for p in (self.variant_name, self.color, self.size) if p) or "-"
 
     @property
+    def item_label(self):
+        return self.item.label
+
+    @property
     def label(self):
         return f"{self.item.label} | {self.spec}"
+
+    category_name = property(lambda self: self.item.category.name)
+    is_printable = property(lambda self: self.item.category.is_printable)
+    item_active = property(lambda self: self.item.is_active)
 
 
 class Design(db.Model):
@@ -126,6 +170,11 @@ class PrintedProduct(db.Model):
     @property
     def label(self):
         return f"{self.design.name} | {self.variant.label}"
+
+    design_name = property(lambda self: self.design.name)
+    item_label = property(lambda self: self.variant.item.label)
+    spec = property(lambda self: self.variant.spec)
+    category_name = property(lambda self: self.variant.item.category.name)
 
 
 KINDS = {
@@ -166,3 +215,27 @@ class StockMovement(db.Model):
     @property
     def target_label(self):
         return (self.variant or self.printed_product).label
+
+    username = property(lambda self: self.user.username)
+
+
+class ItemNote(db.Model):
+    """品番ごと(または色・種類ごと)の備考。書いた人と日時が残る。"""
+    __tablename__ = "item_note"
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("item.id"), nullable=False, index=True)
+    target = db.Column(db.String(64), nullable=False, default="")  # 対象の色・種類。空なら品番全体
+    body = db.Column(db.Text, nullable=False)
+    is_resolved = db.Column(db.Boolean, nullable=False, default=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    item = db.relationship("Item")
+    user = db.relationship("User")
+
+    item_label = property(lambda self: self.item.label)
+    username = property(lambda self: self.user.username)
+    category_id = property(lambda self: self.item.category_id)
+    category_name = property(lambda self: self.item.category.name)
+    brand = property(lambda self: self.item.brand)
+    item_no = property(lambda self: self.item.item_no)

@@ -1,0 +1,46 @@
+{% from "_macros.html" import csrf %}
+
+{# 備考の一覧。back は操作後に戻る先(同じサイト内のパス) #}
+{% macro note_list(notes, back, is_admin) %}
+{% for n in notes %}
+<div class="note {{ 'note-done' if n.is_resolved }}">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <span class="badge text-bg-warning">{{ n.target or '品番全体' }}</span>
+    {% if n.is_resolved %}<span class="badge text-bg-secondary">対応済み</span>{% endif %}
+    <span class="text-muted small">{{ n.username }} ・ {{ n.created_at|jst }}</span>
+  </div>
+  <div class="note-body">{{ n.body }}</div>
+  <div class="d-flex gap-2 mt-1">
+    <form method="post" action="{{ url_for('inventory.note_resolve', note_id=n.id) }}">
+      {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+      <button class="btn btn-sm btn-outline-secondary">{{ '未対応に戻す' if n.is_resolved else '対応済みにする' }}</button>
+    </form>
+    {% if is_admin %}
+    <form method="post" action="{{ url_for('inventory.note_delete', note_id=n.id) }}"
+          onsubmit="return confirm('この備考を削除しますか?')">
+      {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+      <button class="btn btn-sm btn-outline-danger">削除</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endmacro %}
+
+{# 備考の追加フォーム(折りたたみ) #}
+{% macro note_form(item_id, targets, back) %}
+<details class="note-add mt-2">
+  <summary class="btn btn-sm btn-outline-primary">備考を追加</summary>
+  <form method="post" action="{{ url_for('inventory.note_add') }}" class="d-grid gap-2 mt-2" style="max-width:560px">
+    {{ csrf() }}
+    <input type="hidden" name="item_id" value="{{ item_id }}">
+    <input type="hidden" name="back" value="{{ back }}">
+    <input class="form-control" name="target" list="targets-{{ item_id }}" maxlength="64"
+           placeholder="対象の色・種類(空欄なら品番全体)">
+    <datalist id="targets-{{ item_id }}">{% for t in targets %}<option value="{{ t }}">{% endfor %}</datalist>
+    <textarea class="form-control" name="body" rows="3" maxlength="1000" required
+              placeholder="例: これで入荷は最後。この色は、別ブランドの同じ色か近い色を、仕入れ先を変えて探す。"></textarea>
+    <button class="btn btn-primary">追加</button>
+  </form>
+</details>
+{% endmacro %}

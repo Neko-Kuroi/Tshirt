@@ -6,9 +6,11 @@
 import uuid
 
 from sqlalchemy import update
+from sqlalchemy.dialects import postgresql, sqlite
 
 from .. import db
 from ..models import Design, Item, PrintedProduct, StockMovement, Variant
+from ..utils import MAX_QTY
 
 
 class StockError(Exception):
@@ -41,11 +43,31 @@ def _log(batch_id, kind, user, delta, note, variant=None, product=None):
 def _positive(n, label="数量") -> int:
     if not isinstance(n, int) or n <= 0:
         raise StockError(f"{label}は1以上の整数で入力してください。")
+    if n > MAX_QTY:
+        raise StockError(f"{label}は{MAX_QTY:,}以下で入力してください。")
     return n
+
+
+def _insert_ignore(model, **values):
+    """同じ行を同時に作ろうとしても失敗しないINSERT(UNIQUE衝突なら何もしない)。
+
+    衝突の判定をDB側で原子的に行うので、SAVEPOINTも例外処理も要らない。
+    呼び出し側は、実行後に必ずSELECTし直して行を取得すること。
+    """
+    dialect = db.session.get_bind().dialect.name
+    if dialect == "sqlite":
+        stmt = sqlite.insert(model).values(**values).on_conflict_do_nothing()
+    elif dialect == "postgresql":
+        stmt = postgresql.insert(model).values(**values).on_conflict_do_nothing()
+    else:
+        raise NotImplementedError(f"未対応のDBです: {dialect}")
+    db.session.execute(stmt)
 
 
 def get_or_create_variant(item: Item, color="", size="", variant_name="") -> Variant:
     """カテゴリーの設定に合わない列は空文字に落として登録する。"""
+    if not item.is_active:
+        raise StockError("この品番は使用停止中のため、入荷できません。")
     cat = item.category
     color = _norm(color) if cat.uses_color else ""
     size = _norm(size) if cat.uses_size else ""
@@ -56,12 +78,11 @@ def get_or_create_variant(item: Item, color="", size="", variant_name="") -> Var
         raise StockError("サイズを入力してください。")
     if cat.uses_variant_name and not variant_name:
         raise StockError("種類名を入力してください。")
-    v = Variant.query.filter_by(
-        item_id=item.id, color=color, size=size, variant_name=variant_name).first()
+    key = dict(item_id=item.id, color=color, size=size, variant_name=variant_name)
+    v = Variant.query.filter_by(**key).first()
     if not v:
-        v = Variant(item_id=item.id, color=color, size=size, variant_name=variant_name, quantity=0)
-        db.session.add(v)
-        db.session.flush()
+        _insert_ignore(Variant, **key, quantity=0)
+        v = Variant.query.filter_by(**key).one()
     return v
 
 
@@ -71,18 +92,17 @@ def get_or_create_design(name: str) -> Design:
         raise StockError("デザイン名を入力してください。")
     d = Design.query.filter_by(name=name).first()
     if not d:
-        d = Design(name=name)
-        db.session.add(d)
-        db.session.flush()
+        _insert_ignore(Design, name=name)
+        d = Design.query.filter_by(name=name).one()
     return d
 
 
 def get_or_create_product(design: Design, variant: Variant) -> PrintedProduct:
-    p = PrintedProduct.query.filter_by(design_id=design.id, variant_id=variant.id).first()
+    key = dict(design_id=design.id, variant_id=variant.id)
+    p = PrintedProduct.query.filter_by(**key).first()
     if not p:
-        p = PrintedProduct(design_id=design.id, variant_id=variant.id, quantity=0)
-        db.session.add(p)
-        db.session.flush()
+        _insert_ignore(PrintedProduct, **key, quantity=0)
+        p = PrintedProduct.query.filter_by(**key).one()
     return p
 
 
@@ -115,6 +135,8 @@ def adjust(user, target, delta: int, note: str) -> str:
     """棚卸し調整。増減どちらも可。理由(note)は必須。"""
     if not isinstance(delta, int) or delta == 0:
         raise StockError("増減数は0以外の整数で入力してください。")
+    if abs(delta) > MAX_QTY:
+        raise StockError(f"増減数は{MAX_QTY:,}以下で入力してください。")
     if not _norm(note):
         raise StockError("棚卸し調整には理由を入力してください。")
     batch = str(uuid.uuid4())
@@ -137,6 +159,8 @@ def convert_to_printed(user, variant: Variant, design_name: str,
         raise StockError("完成数が使用数を超えています。")
     if not variant.item.category.is_printable:
         raise StockError("このカテゴリーはプリント対象ではありません。")
+    if not variant.item.is_active:
+        raise StockError("この品番は使用停止中のため、プリント変換できません。")
 
     design = get_or_create_design(design_name)
     batch = str(uuid.uuid4())

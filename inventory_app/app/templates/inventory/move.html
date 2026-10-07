@@ -17,7 +17,7 @@
         {% for p in products %}<option value="p:{{ p.id }}" {{ 'selected' if form.get('target') == 'p:%d'|format(p.id) }}>{{ p.label }} (在庫 {{ p.quantity }})</option>{% endfor %}
       </optgroup>
       <optgroup label="無地">
-        {% for v in variants %}<option value="v:{{ v.id }}" {{ 'selected' if form.get('target') == 'v:%d'|format(v.id) }}>[{{ v.item.category.name }}] {{ v.label }} (在庫 {{ v.quantity }})</option>{% endfor %}
+        {% for v in variants %}<option value="v:{{ v.id }}" {{ 'selected' if form.get('target') == 'v:%d'|format(v.id) }}>[{{ v.category_name }}] {{ v.label }} (在庫 {{ v.quantity }})</option>{% endfor %}
       </optgroup>
     </select></div>
   <div>{{ qty_input("qty", form.get("qty",""), negative=True, label="数量(調整のときは ± 可)") }}</div>

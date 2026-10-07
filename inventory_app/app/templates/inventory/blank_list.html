@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_notes.html" import note_list, note_form %}
 {% block title %}無地在庫 | 在庫管理{% endblock %}
 {% block content %}
 <h1 class="page-title">無地在庫</h1>
@@ -23,6 +24,7 @@
     <h2 class="h6 fw-bold mb-2">{{ m.item.label }}</h2>
     <span class="text-muted small">合計 <span class="num">{{ m.total }}</span></span>
   </div>
+  {% if m.notes %}<div class="mb-2">{{ note_list(m.notes, request.full_path, current_user.is_admin) }}</div>{% endif %}
   {% if m.rows %}
   <div class="table-responsive">
     <table class="table table-sm matrix mb-0">
@@ -33,7 +35,7 @@
       </tr></thead>
       <tbody>
       {% for r in m.rows %}
-        <tr><td>{{ r.label }}</td>
+        <tr><td>{{ r.label }}{% if r.has_note %} <span class="badge text-bg-warning">備考</span>{% endif %}</td>
           {% for s in m.sizes %}
             {% set v = r.cells.get(s) %}
             <td class="num {{ 'zero' if (not v or v.quantity == 0) else ('low' if v.quantity <= 3) }}">{{ v.quantity if v else '–' }}</td>
@@ -47,7 +49,10 @@
   {% else %}
     <div class="text-muted small">在庫登録がありません。</div>
   {% endif %}
-  <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('inventory.receive', item_id=m.item.id) }}">この品番を入荷</a></div>
+  <div class="mt-2 d-flex flex-wrap gap-2 align-items-start">
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('inventory.receive', item_id=m.item.id) }}">この品番を入荷</a>
+    {{ note_form(m.item.id, m.targets, request.full_path) }}
+  </div>
 </div>
 {% else %}
 <div class="panel text-muted">該当する品番がありません。管理者は「品番」から登録できます。</div>

@@ -1,7 +1,7 @@
 import pytest
 
 from app import db
-from app.models import Item, PrintedProduct, StockMovement, User, Variant
+from app.models import Design, Item, PrintedProduct, StockMovement, User, Variant
 from app.services import stock
 from app.services.stock import StockError
 
@@ -119,3 +119,43 @@ def test_ship_printed_product(app):
     stock.ship(u, p, 4)
     db.session.commit()
     assert PrintedProduct.query.one().quantity == 6
+
+
+# ---- 同時リクエストで同じ行を作ろうとした場合(UNIQUE衝突しても落ちない) ----------
+
+@pytest.fixture
+def lose_the_race(monkeypatch):
+    """INSERTの直前に「別リクエストが先に同じ行を作った」状況を再現する。"""
+    real = stock._insert_ignore
+
+    def racing(model, **values):
+        real(model, **values)  # 他リクエストが先に作成
+        real(model, **values)  # 自分のINSERTは衝突するが、何も起きず例外にならない
+    monkeypatch.setattr(stock, "_insert_ignore", racing)
+
+
+def test_get_or_create_variant_survives_race(app, lose_the_race):
+    v = stock.get_or_create_variant(_tee(), "黒", "M")
+    db.session.commit()
+    assert Variant.query.count() == 1
+    assert v.quantity == 0 and v.updated_at is not None
+
+
+def test_get_or_create_design_survives_race(app, lose_the_race):
+    d = stock.get_or_create_design(" ロゴA ")
+    db.session.commit()
+    assert Design.query.count() == 1 and d.name == "ロゴA"
+
+
+def test_get_or_create_product_survives_race(app, monkeypatch):
+    v = stock.get_or_create_variant(_tee(), "黒", "M")
+    d = stock.get_or_create_design("ロゴA")
+    real = stock._insert_ignore
+
+    def racing(model, **values):
+        real(model, **values)
+        real(model, **values)
+    monkeypatch.setattr(stock, "_insert_ignore", racing)
+    p = stock.get_or_create_product(d, v)
+    db.session.commit()
+    assert PrintedProduct.query.count() == 1 and p.quantity == 0

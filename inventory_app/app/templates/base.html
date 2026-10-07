@@ -23,6 +23,7 @@
         <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory.receive') }}">入荷</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory.convert') }}">プリント変換</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory.move') }}">出荷・調整</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory.notes') }}">備考</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory.history') }}">履歴</a></li>
         {% if current_user.is_admin %}
         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.items') }}">品番</a></li>

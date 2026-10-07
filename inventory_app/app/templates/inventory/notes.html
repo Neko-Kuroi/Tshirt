@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_notes.html" import note_list %}
+{% block title %}備考 | 在庫管理{% endblock %}
+{% block content %}
+<h1 class="page-title">備考</h1>
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><a class="nav-link {{ 'active' if not show_all }}" href="{{ url_for('inventory.notes') }}">未対応</a></li>
+  <li class="nav-item"><a class="nav-link {{ 'active' if show_all }}" href="{{ url_for('inventory.notes', all=1) }}">対応済みも表示</a></li>
+</ul>
+{% for n in notes %}
+<div class="panel mb-3">
+  <div class="fw-bold mb-1">
+    <a href="{{ url_for('inventory.blank_list', category=n.category_id, q=(n.item_no or n.brand)) }}">{{ n.item_label }}</a>
+    <span class="text-muted small ms-1">{{ n.category_name }}</span>
+  </div>
+  {{ note_list([n], request.full_path, current_user.is_admin) }}
+</div>
+{% else %}
+<div class="panel text-muted">{{ '備考はありません。' if show_all else '未対応の備考はありません。' }}
+  備考は、無地在庫の画面で品番ごとに追加できます。</div>
+{% endfor %}
+{% endblock %}

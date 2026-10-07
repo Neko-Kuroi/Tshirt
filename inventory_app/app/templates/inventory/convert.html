@@ -11,7 +11,7 @@
       <option value="">選んでください</option>
       {% for v in variants %}
       <option value="{{ v.id }}" {{ 'selected' if form.get('variant_id') == v.id|string }}>
-        [{{ v.item.category.name }}] {{ v.label }} (在庫 {{ v.quantity }})</option>
+        [{{ v.category_name }}] {{ v.label }} (在庫 {{ v.quantity }})</option>
       {% endfor %}
     </select></div>
   <div><label class="form-label" for="design">デザイン</label>

@@ -36,6 +36,8 @@ class Config:
     PERMANENT_SESSION_LIFETIME = 60 * 60 * 24 * 14  # 14日
 
     HISTORY_PER_PAGE = 50
+    # DBが未作成/古いままのとき、500ではなく案内ページ(503)を出す。テストでは切る
+    CHECK_SCHEMA = True
     # プロキシ(tailscale serve等)の背後で動かす場合 INVENTORY_BEHIND_PROXY=1
     BEHIND_PROXY = os.environ.get("INVENTORY_BEHIND_PROXY") == "1"
 
@@ -44,4 +46,5 @@ class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite://"
     WTF_CSRF_ENABLED = False
+    CHECK_SCHEMA = False
     SECRET_KEY = "test"

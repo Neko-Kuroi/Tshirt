@@ -7,10 +7,10 @@
     <thead><tr><th>ユーザー名</th><th>権限</th><th>状態</th><th>操作</th></tr></thead>
     <tbody>
     {% for u in users %}
-      <tr><td>{{ u.username }}</td><td>{{ '管理者' if u.is_admin else 'スタッフ' }}</td><td>{{ '有効' if u.is_active_flag else '無効' }}</td>
+      <tr><td>{{ u.username }}</td><td>{{ '管理者' if u.is_admin else 'スタッフ' }}</td><td>{{ '有効' if u.is_active else '無効' }}</td>
         <td class="d-flex gap-2 flex-wrap">
           <form method="post" action="{{ url_for('admin.user_toggle', uid=u.id) }}">{{ csrf() }}
-            <button class="btn btn-sm btn-outline-secondary">{{ '無効にする' if u.is_active_flag else '有効にする' }}</button></form>
+            <button class="btn btn-sm btn-outline-secondary">{{ '無効にする' if u.is_active else '有効にする' }}</button></form>
           <form method="post" action="{{ url_for('admin.user_password', uid=u.id) }}" class="d-flex gap-1">{{ csrf() }}
             <input class="form-control form-control-sm" style="min-height:36px;width:9rem" name="password" type="password" placeholder="新パスワード" autocomplete="new-password">
             <button class="btn btn-sm btn-outline-primary">再設定</button></form>
